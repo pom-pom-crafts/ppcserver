@@ -4,22 +4,27 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
-func StartWSServer(url string /* TODO, options ...Option */) (*WSServer, error) {
+func StartWSServer(addr string /* TODO, options ...Option */) {
 	var upgrader *websocket.Upgrader
 	// TODO, one can pass customized upgrader from options
 	upgrader = &websocket.Upgrader{}
 
 	wsServer := &WSServer{
-		upgrader,
+		addr:     addr,
+		upgrader: upgrader,
 	}
-	wsServer.Start()
 
-	return wsServer, nil
+	// http.ListenAndServe is blocked until error is returned, so we must invoke wsServer.Start() in goroutine.
+	wsServer.Start()
 }
 
 type WSServer struct {
+	addr     string
 	upgrader *websocket.Upgrader
 }
 
@@ -27,9 +32,23 @@ func (s *WSServer) Start() {
 	defer s.Shutdown()
 
 	http.Handle("/", s)
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal("http.ListenAndServe() fail", err)
-	}
+
+	go func() {
+		// TODO, notify Shutdown() when err is returned
+		if err := http.ListenAndServe(s.addr, nil); err != nil {
+			log.Fatal("http.ListenAndServe() fail, err=", err)
+		}
+	}()
+
+	exitSig := s.blockUntilExitSignal()
+	log.Println("WSServer.Start() exit due to the signal:", exitSig)
+}
+
+func (s *WSServer) blockUntilExitSignal() os.Signal {
+	// Note: signal.Notify requires exitCh with buffer size of at least 1.
+	exitCh := make(chan os.Signal, 1)
+	signal.Notify(exitCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	return <-exitCh
 }
 
 func (s *WSServer) Shutdown() {
