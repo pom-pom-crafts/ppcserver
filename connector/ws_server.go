@@ -33,22 +33,22 @@ func (s *WSServer) Start() {
 
 	http.Handle("/", s)
 
+	exitCh := make(chan os.Signal, 1) // Note: signal.Notify requires exitCh with buffer size of at least 1.
+	serverErrCh := make(chan error, 1)
+
 	go func() {
-		// TODO, notify Shutdown() when err is returned
-		if err := http.ListenAndServe(s.addr, nil); err != nil {
-			log.Fatal("http.ListenAndServe() fail, err=", err)
-		}
+		serverErrCh <- http.ListenAndServe(s.addr, nil)
 	}()
 
-	exitSig := s.blockUntilExitSignal()
-	log.Println("WSServer.Start() exit due to the signal:", exitSig)
-}
-
-func (s *WSServer) blockUntilExitSignal() os.Signal {
-	// Note: signal.Notify requires exitCh with buffer size of at least 1.
-	exitCh := make(chan os.Signal, 1)
 	signal.Notify(exitCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	return <-exitCh
+
+	// Block until receive exit signal or http.ListenAndServe returns with an error.
+	select {
+	case exitSig := <-exitCh:
+		log.Println("WSServer.Start() exit due to the signal:", exitSig)
+	case err := <-serverErrCh:
+		log.Println("WSServer.Start() exit due to http.ListenAndServe() fail with err:", err)
+	}
 }
 
 func (s *WSServer) Shutdown() {
