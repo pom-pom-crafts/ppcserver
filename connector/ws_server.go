@@ -10,54 +10,62 @@ import (
 )
 
 func StartWSServer(addr string /* TODO, options ...Option */) {
+	var httpServer *http.Server
+	httpServer = &http.Server{Addr: addr}
+
 	var upgrader *websocket.Upgrader
 	// TODO, one can pass customized upgrader from options
 	upgrader = &websocket.Upgrader{}
 
 	wsServer := &WSServer{
-		addr:     addr,
-		upgrader: upgrader,
+		server:      httpServer,
+		upgrader:    upgrader,
+		exitCh:      make(chan os.Signal, 1), // Note: signal.Notify requires exitCh with buffer size of at least 1.
+		serverErrCh: make(chan error, 1),
 	}
 
-	// http.ListenAndServe is blocked until error is returned, so we must invoke wsServer.Start() in goroutine.
 	wsServer.Start()
 }
 
 type WSServer struct {
-	addr     string
-	upgrader *websocket.Upgrader
+	server      *http.Server
+	serveMux    *http.ServeMux
+	upgrader    *websocket.Upgrader
+	exitCh      chan os.Signal // For receiving SIGINT/SIGTERM signals.
+	serverErrCh chan error     // For receiving http.ListenAndServe error.
 }
 
 func (s *WSServer) Start() {
 	defer s.Shutdown()
 
-	http.Handle("/", s)
-
-	exitCh := make(chan os.Signal, 1) // Note: signal.Notify requires exitCh with buffer size of at least 1.
-	serverErrCh := make(chan error, 1)
+	// s.server.Handler.(*http.ServeMux).Handle("/", s)
 
 	go func() {
-		serverErrCh <- http.ListenAndServe(s.addr, nil)
+		s.serverErrCh <- s.server.ListenAndServe()
 	}()
 
-	signal.Notify(exitCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	s.blockUntilExitSignalOrServerError()
+}
 
-	// Block until receive exit signal or http.ListenAndServe returns with an error.
+// blockUntilExitSignalOrServerError will block until receive exit signal or http.ListenAndServe returns with an error.
+func (s *WSServer) blockUntilExitSignalOrServerError() {
+	// Listen to SIGINT and SIGTERM signal and send to exitCh when received.
+	signal.Notify(s.exitCh, syscall.SIGINT, syscall.SIGTERM)
+
 	select {
-	case exitSig := <-exitCh:
+	case exitSig := <-s.exitCh:
 		log.Println("WSServer.Start() exit due to the signal:", exitSig)
-	case err := <-serverErrCh:
+	case err := <-s.serverErrCh:
 		log.Println("WSServer.Start() exit due to http.ListenAndServe() fail with err:", err)
 	}
 }
 
 func (s *WSServer) Shutdown() {
-	// TODO, graceful shutdown logic
+	// TODO, graceful shutdown logic, such as shutdown s.server
 	log.Println("WSServer.Shutdown() to be implemented")
 }
 
 func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// TODO, handle websocket upgrade
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 
 	// Log then return when Upgrade failed.
