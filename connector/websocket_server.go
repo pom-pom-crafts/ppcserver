@@ -8,12 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 func StartWebSocketServer(addr string, options ...websocketOption) {
 	websocketServer := &WebSocketServer{
-		path:        "/",                     // Defaults to "/" if not set through WithWebSocketPath.
+		options:     defaultWebSocketOptions(),
 		exitCh:      make(chan os.Signal, 1), // Note: signal.Notify requires exitCh with buffer size of at least 1.
 		serverErrCh: make(chan error, 1),
 	}
@@ -42,9 +41,7 @@ func StartWebSocketServer(addr string, options ...websocketOption) {
 }
 
 type WebSocketServer struct {
-	// path is the URL to accept WebSocket connections.
-	// Defaults to "/" if not set through WithWebSocketPath.
-	path        string
+	options     *websocketOptions
 	serveMux    *http.ServeMux
 	server      *http.Server
 	upgrader    *websocket.Upgrader
@@ -55,7 +52,7 @@ type WebSocketServer struct {
 func (s *WebSocketServer) Start() {
 	defer s.Shutdown()
 
-	s.serveMux.Handle(s.path, s)
+	s.serveMux.Handle(s.options.path, s)
 
 	go func() {
 		s.serverErrCh <- s.server.ListenAndServe()
@@ -81,7 +78,7 @@ func (s *WebSocketServer) Shutdown() {
 	log.Println("WebSocketServer.Shutdown() begin")
 
 	// TODO, do we need to add timeout ?
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), s.options.shutdownTimeout)
 	defer cancel()
 
 	if err := s.server.Shutdown(timeoutCtx); err != nil {
