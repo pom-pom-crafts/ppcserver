@@ -10,15 +10,21 @@ import (
 )
 
 func StartWSServer(addr string /* TODO, options ...Option */) {
-	var httpServer *http.Server
-	httpServer = &http.Server{Addr: addr}
+	serveMux := http.DefaultServeMux
+
+	var server *http.Server
+	server = &http.Server{
+		Addr:    addr,
+		Handler: serveMux,
+	}
 
 	var upgrader *websocket.Upgrader
 	// TODO, one can pass customized upgrader from options
 	upgrader = &websocket.Upgrader{}
 
 	wsServer := &WSServer{
-		server:      httpServer,
+		server:      server,
+		serveMux:    serveMux,
 		upgrader:    upgrader,
 		exitCh:      make(chan os.Signal, 1), // Note: signal.Notify requires exitCh with buffer size of at least 1.
 		serverErrCh: make(chan error, 1),
@@ -38,7 +44,8 @@ type WSServer struct {
 func (s *WSServer) Start() {
 	defer s.Shutdown()
 
-	// s.server.Handler.(*http.ServeMux).Handle("/", s)
+	// TODO, custom pattern
+	s.serveMux.Handle("/", s)
 
 	go func() {
 		s.serverErrCh <- s.server.ListenAndServe()
@@ -49,7 +56,7 @@ func (s *WSServer) Start() {
 
 // blockUntilExitSignalOrServerError will block until receive exit signal or http.ListenAndServe returns with an error.
 func (s *WSServer) blockUntilExitSignalOrServerError() {
-	// Listen to SIGINT and SIGTERM signal and send to exitCh when received.
+	// Listen and send to exitCh when SIGINT/SIGTERM signal is received.
 	signal.Notify(s.exitCh, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
