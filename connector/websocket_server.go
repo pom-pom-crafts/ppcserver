@@ -13,6 +13,7 @@ import (
 
 func StartWebSocketServer(addr string, options ...websocketOption) {
 	websocketServer := &WebSocketServer{
+		path:        "/",                     // Defaults to "/" if not set through WithWebSocketPath.
 		exitCh:      make(chan os.Signal, 1), // Note: signal.Notify requires exitCh with buffer size of at least 1.
 		serverErrCh: make(chan error, 1),
 	}

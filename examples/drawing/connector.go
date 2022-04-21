@@ -19,13 +19,4 @@ func main() {
 		":8080",
 		connector.WithWebSocketPath("/ws"),
 	)
-	// if err != nil {
-	// 	log.Fatalln("connector.StartWebSocketServer() fail", err)
-	// }
-
-	// defer wsServer.Shutdown()
-	// wsServer.Start()
-
-	// var exit chan int
-	// <-exit
 }
