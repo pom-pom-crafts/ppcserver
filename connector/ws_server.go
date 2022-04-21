@@ -1,12 +1,14 @@
 package connector
 
 import (
+	"context"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func StartWSServer(addr string /* TODO, options ...Option */) {
@@ -68,8 +70,20 @@ func (s *WSServer) blockUntilExitSignalOrServerError() {
 }
 
 func (s *WSServer) Shutdown() {
-	// TODO, graceful shutdown logic, such as shutdown s.server
-	log.Println("WSServer.Shutdown() to be implemented")
+	log.Println("WSServer.Shutdown() begin")
+
+	// TODO, do we need to add timeout ?
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := s.server.Shutdown(timeoutCtx); err != nil {
+		log.Println("WSServer.server.Shutdown() fail with err:", err)
+	}
+
+	// TODO, should we call Close() after Shutdown() ?
+	// _ = s.server.Close()
+
+	log.Println("WSServer.Shutdown() complete")
 }
 
 func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
