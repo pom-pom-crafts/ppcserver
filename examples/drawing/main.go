@@ -7,9 +7,13 @@ import (
 
 func main() {
 	log.Println("before start")
-	connector.StartWSServer(":8080")
+
+	connector.StartWebSocketServer(
+		":8080",
+		connector.WithWebSocketPath("/"),
+	)
 	// if err != nil {
-	// 	log.Fatalln("connector.StartWSServer() fail", err)
+	// 	log.Fatalln("connector.StartWebSocketServer() fail", err)
 	// }
 
 	// defer wsServer.Shutdown()
