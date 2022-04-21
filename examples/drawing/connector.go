@@ -3,14 +3,21 @@ package main
 import (
 	"github.com/pom-pom-crafts/ppcserver/connector"
 	"log"
+	"net/http"
 )
 
 func main() {
-	log.Println("before start")
+	// Serve client.html in root path.
+	http.HandleFunc(
+		"/", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, "client.html")
+		},
+	)
+	log.Println("Open client.html through: http://localhost:8080")
 
 	connector.StartWebSocketServer(
 		":8080",
-		connector.WithWebSocketPath("/"),
+		connector.WithWebSocketPath("/ws"),
 	)
 	// if err != nil {
 	// 	log.Fatalln("connector.StartWebSocketServer() fail", err)

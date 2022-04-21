@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Drawing Example</title>
+</head>
+<body>
+</body>
+<script>
+    var socket = new WebSocket("ws://localhost:8080/ws");
+    socket.onopen = function (event) {
+        console.log("socket.onopen");
+        send({"hello": "world"});
+    }
+    socket.onclose = function (event) {
+        console.log("socket.onclose, code: " + event.code + ", reason: " + event.reason);
+    }
+    socket.onerror = function (event) {
+        console.log("socket.onerror, event:", event);
+    }
+    socket.onmessage = function (event) {
+        console.log("socket.onmessage:", event.data);
+    }
+
+    function send(data) {
+        socket.send(typeof data == "object" ? JSON.stringify(data): data);
+        console.log("socket.send:", data);
+    }
+</script>
+</html>

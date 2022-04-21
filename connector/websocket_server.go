@@ -96,7 +96,6 @@ func (s *WebSocketServer) Shutdown() {
 func (s *WebSocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 
-	// Log then return when Upgrade failed.
 	if err != nil {
 		log.Println("WebSocketServer.upgrader.Upgrade() fail", err)
 		return
