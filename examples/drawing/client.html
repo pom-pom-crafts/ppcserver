@@ -7,19 +7,31 @@
 <body>
 </body>
 <script>
-    var socket = new WebSocket("ws://localhost:8080/ws");
-    socket.onopen = function (event) {
-        console.log("socket.onopen");
-        send({"hello": "world"});
-    }
-    socket.onclose = function (event) {
-        console.log("socket.onclose, code: " + event.code + ", reason: " + event.reason);
-    }
-    socket.onerror = function (event) {
-        console.log("socket.onerror, event:", event);
-    }
-    socket.onmessage = function (event) {
-        console.log("socket.onmessage:", event.data);
+    var url = "ws://localhost:8080/ws";
+
+    var socket = connect();
+
+    // Send a POST request will get HTTP status code 400.
+    // fetch("http://localhost:8080/ws", { method: "POST" })
+    //     .then(resp => console.log("fetch resp:", resp))
+    //     .catch((err) => console.error("fetch error:", err));
+
+    function connect() {
+        socket = new WebSocket(url);
+        socket.onopen = function (event) {
+            console.log("socket.onopen");
+            send({"hello": "world"});
+        }
+        socket.onclose = function (event) {
+            console.log("socket.onclose, code: " + event.code + ", reason: " + event.reason);
+        }
+        socket.onerror = function (event) {
+            console.log("socket.onerror, event:", event);
+        }
+        socket.onmessage = function (event) {
+            console.log("socket.onmessage:", event.data);
+        }
+        return socket;
     }
 
     function send(data) {

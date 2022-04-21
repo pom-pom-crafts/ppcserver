@@ -7,10 +7,11 @@ import (
 )
 
 type (
-	websocketOption func(s *WebSocketServer)
+	// WebSocketOption is a function to apply various configurations to customize a WebSocketServer.
+	WebSocketOption func(s *WebSocketServer)
 
-	// websocketOptions defines the configurable options for starting a WebSocketServer.
-	websocketOptions struct {
+	// WebSocketOptions defines the configurable options of the WebSocketServer.
+	WebSocketOptions struct {
 		// path is the URL to accept WebSocket connections.
 		// Defaults to "/" if not set through WithWebSocketPath.
 		path string
@@ -21,43 +22,43 @@ type (
 	}
 )
 
-func defaultWebSocketOptions() *websocketOptions {
-	return &websocketOptions{
+func defaultWebSocketOptions() *WebSocketOptions {
+	return &WebSocketOptions{
 		path:            "/",
 		shutdownTimeout: 10 * time.Second,
 	}
 }
 
-// WithWebSocketPath is a websocketOption to set the URL path for accepting WebSocket connections.
-func WithWebSocketPath(path string) websocketOption {
+// WithWebSocketPath is a WebSocketOption to set the URL path for accepting WebSocket connections.
+func WithWebSocketPath(path string) WebSocketOption {
 	return func(s *WebSocketServer) {
 		s.options.path = path
 	}
 }
 
-// WithHTTPServeMux is a websocketOption to set a custom http.ServeMux of WebSocketServer.
-func WithHTTPServeMux(serveMux *http.ServeMux) websocketOption {
+// WithHTTPServeMux is a WebSocketOption to set a custom http.ServeMux of WebSocketServer.
+func WithHTTPServeMux(serveMux *http.ServeMux) WebSocketOption {
 	return func(s *WebSocketServer) {
 		s.serveMux = serveMux
 	}
 }
 
-// WithHTTPServer is a websocketOption to set a custom http.Server of WebSocketServer.
-func WithHTTPServer(server *http.Server) websocketOption {
+// WithHTTPServer is a WebSocketOption to set a custom http.Server of WebSocketServer.
+func WithHTTPServer(server *http.Server) WebSocketOption {
 	return func(s *WebSocketServer) {
 		s.server = server
 	}
 }
 
-// WithWebSocketUpgrader is a websocketOption to set a custom websocket.Upgrader of WebSocketServer.
-func WithWebSocketUpgrader(upgrader *websocket.Upgrader) websocketOption {
+// WithWebSocketUpgrader is a WebSocketOption to set a custom websocket.Upgrader of WebSocketServer.
+func WithWebSocketUpgrader(upgrader *websocket.Upgrader) WebSocketOption {
 	return func(s *WebSocketServer) {
 		s.upgrader = upgrader
 	}
 }
 
-// WithShutdownTimeout is a websocketOption to set the maximum time for WebSocketServer.Shutdown() to complete.
-func WithShutdownTimeout(shutdownTimeout time.Duration) websocketOption {
+// WithShutdownTimeout is a WebSocketOption to set the maximum time for WebSocketServer.Shutdown() to complete.
+func WithShutdownTimeout(shutdownTimeout time.Duration) WebSocketOption {
 	return func(s *WebSocketServer) {
 		s.options.shutdownTimeout = shutdownTimeout
 	}
