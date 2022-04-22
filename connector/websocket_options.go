@@ -12,27 +12,27 @@ type (
 
 	// WebSocketOptions defines the configurable options of the WebSocketServer.
 	WebSocketOptions struct {
-		// path is the URL to accept WebSocket connections.
+		// Path is the URL to accept WebSocket connections.
 		// Defaults to "/" if not set through WithWebSocketPath.
-		path string
+		Path string
 
-		// shutdownTimeout sets the maximum time for WebSocketServer.Shutdown() to complete.
+		// ShutdownTimeout sets the maximum time for WebSocketServer.Shutdown() to complete.
 		// Defaults to 10 seconds if not set through WithShutdownTimeout.
-		shutdownTimeout time.Duration
+		ShutdownTimeout time.Duration
 	}
 )
 
 func defaultWebSocketOptions() *WebSocketOptions {
 	return &WebSocketOptions{
-		path:            "/",
-		shutdownTimeout: 10 * time.Second,
+		Path:            "/",
+		ShutdownTimeout: 10 * time.Second,
 	}
 }
 
-// WithWebSocketPath is a WebSocketOption to set the URL path for accepting WebSocket connections.
+// WithWebSocketPath is a WebSocketOption to set the URL Path for accepting WebSocket connections.
 func WithWebSocketPath(path string) WebSocketOption {
 	return func(s *WebSocketServer) {
-		s.options.path = path
+		s.options.Path = path
 	}
 }
 
@@ -60,6 +60,6 @@ func WithWebSocketUpgrader(upgrader *websocket.Upgrader) WebSocketOption {
 // WithShutdownTimeout is a WebSocketOption to set the maximum time for WebSocketServer.Shutdown() to complete.
 func WithShutdownTimeout(shutdownTimeout time.Duration) WebSocketOption {
 	return func(s *WebSocketServer) {
-		s.options.shutdownTimeout = shutdownTimeout
+		s.options.ShutdownTimeout = shutdownTimeout
 	}
 }

@@ -55,7 +55,7 @@ type WebSocketServer struct {
 func (s *WebSocketServer) Start() {
 	defer s.Shutdown()
 
-	s.serveMux.Handle(s.options.path, s)
+	s.serveMux.Handle(s.options.Path, s)
 
 	go func() {
 		s.serverErrCh <- s.server.ListenAndServe()
@@ -81,7 +81,7 @@ func (s *WebSocketServer) Shutdown() {
 	log.Println("ppcserver: WebSocketServer.Shutdown() begin")
 
 	// TODO, do we need to add timeout ?
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), s.options.shutdownTimeout)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), s.options.ShutdownTimeout)
 	defer cancel()
 
 	if err := s.server.Shutdown(timeoutCtx); err != nil {
