@@ -58,7 +58,11 @@ func (s *WebSocketServer) Start() {
 	s.serveMux.Handle(s.options.Path, s)
 
 	go func() {
-		s.serverErrCh <- s.server.ListenAndServe()
+		if s.options.TLSCertFile != "" || s.options.TLSKeyFile != "" {
+			s.serverErrCh <- s.server.ListenAndServeTLS(s.options.TLSCertFile, s.options.TLSKeyFile)
+		} else {
+			s.serverErrCh <- s.server.ListenAndServe()
+		}
 	}()
 
 	s.blockUntilExitSignalOrServerError()
