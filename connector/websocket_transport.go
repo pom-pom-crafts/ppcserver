@@ -26,13 +26,17 @@ type (
 		opts     *websocketTransportOptions
 		mu       sync.RWMutex
 		isClosed bool
+		// Buffered channel of outbound messages.
+		send chan []byte
 	}
 )
 
 func newWebsocketTransport(conn *websocket.Conn, opts *websocketTransportOptions) *websocketTransport {
 	transport := &websocketTransport{
-		conn: conn,
-		opts: opts,
+		conn:     conn,
+		opts:     opts,
+		isClosed: false,
+		send:     make(chan []byte, 256), // TODO, buffer size is configurable
 	}
 
 	return transport
