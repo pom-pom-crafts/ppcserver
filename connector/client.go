@@ -10,7 +10,8 @@ const (
 )
 
 type (
-	clientReadyState int
+	// clientReadyState represents different readyStates of the Client, uint8 is used for save memory usage.
+	clientReadyState uint8
 
 	// Client represents a client connection to any server of the connector.
 	Client struct {

@@ -205,7 +205,7 @@ func (s *WebsocketServer) Shutdown() {
 func (s *WebsocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 
-	// If the upgrade fails, then Upgrade replies to the client with an HTTP error.
+	// Note: upgrader.Upgrade will reply to the client with an HTTP error when it returns an err.
 	if err != nil {
 		log.Println("ppcserver: WebsocketServer.upgrader.Upgrade() error:", err)
 		return
