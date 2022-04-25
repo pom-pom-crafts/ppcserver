@@ -1,11 +1,15 @@
 package connector
 
+import (
+	"github.com/gorilla/websocket"
+	"log"
+)
+
 const (
-	// ClientReadyStateNew is the readyState when the connection has established,
-	// and the server is waiting for auth or reconnect message from the peer.
-	ClientReadyStateNew clientReadyState = iota
+	// ClientReadyStateConnected is the readyState when the connection has established,
+	// and the server is waiting for the auth message from the peer.
+	ClientReadyStateConnected clientReadyState = iota
 	ClientReadyStateAuthorized
-	ClientReadyStateOffline
 	ClientReadyStateClosed
 )
 
@@ -24,7 +28,7 @@ type (
 func NewClient(transport Transport) *Client {
 	client := &Client{
 		transport:  transport,
-		readyState: ClientReadyStateNew,
+		readyState: ClientReadyStateConnected,
 	}
 
 	return client
