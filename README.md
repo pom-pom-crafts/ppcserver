@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/pom-pom-crafts/ppcserver.svg)](https://pkg.go.dev/github.com/pom-pom-crafts/ppcserver)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pom-pom-crafts/ppcserver)](https://goreportcard.com/report/github.com/pom-pom-crafts/ppcserver)
 
-A Go Game Server featured real-time WebSocket communication, Stateful Room, and distributed scaling via NATS.
+A Go multiplayer game server framework featured real-time WebSocket communication, Stateful Room, and distributed scaling via NATS.
 
 ## Documentation
 - [Drawing example](./examples/drawing/README.md)
