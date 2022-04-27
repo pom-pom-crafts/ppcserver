@@ -15,7 +15,7 @@ func main() {
 	)
 	log.Println("Open client.html through: http://localhost:8080")
 
-	connector.NewWebsocketServer(
+	connector.NewWebsocketConnector(
 		":8080",
 		connector.WithWebsocketPath("/ws"),
 	).Start()

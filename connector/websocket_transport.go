@@ -26,8 +26,6 @@ type (
 		opts     *websocketTransportOptions
 		mu       sync.RWMutex
 		isClosed bool
-		// Buffered channel of outbound messages.
-		send chan []byte
 	}
 )
 
@@ -36,7 +34,6 @@ func newWebsocketTransport(conn *websocket.Conn, opts *websocketTransportOptions
 		conn:     conn,
 		opts:     opts,
 		isClosed: false,
-		send:     make(chan []byte, 256), // TODO, buffer size is configurable
 	}
 
 	return transport
@@ -91,18 +88,10 @@ func (t *websocketTransport) writeLoop() {
 
 func (t *websocketTransport) readLoop() {
 	defer func() {
-		// TODO, notify Client to remove it from WebSocketServer.
+		// TODO, notify client to remove it from WebSocketServer.
 		// c.hub.unregister <- c
 		t.conn.Close()
 	}()
-
-	if t.opts.maxMessageSize > 0 {
-		t.conn.SetReadLimit(t.opts.maxMessageSize)
-	}
-
-	// TODO, wait pong
-	// c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	// c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
 	for {
 		_, message, err := t.conn.ReadMessage()

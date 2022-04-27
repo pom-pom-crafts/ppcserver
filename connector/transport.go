@@ -13,6 +13,7 @@ type (
 		ProtocolType() TransportProtocolType
 		// NetConn should return the internal net.Conn of the connection.
 		NetConn() net.Conn
+		Read() ([]byte, error)
 		// Write should write single data into a connection.
 		Write([]byte) error
 		// Close must close transport.
