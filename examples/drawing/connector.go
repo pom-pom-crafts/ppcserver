@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/pom-pom-crafts/ppcserver"
 	"github.com/pom-pom-crafts/ppcserver/connector"
 	"log"
 	"net/http"
@@ -15,8 +16,11 @@ func main() {
 	)
 	log.Println("Open client.html through: http://localhost:8080")
 
-	connector.NewWebsocketConnector(
-		":8080",
-		connector.WithWebsocketPath("/ws"),
+	ppcserver.NewServer(
+		ppcserver.WithComponent(
+			connector.NewWebsocketConnector(
+				":8080", connector.WithWebsocketPath("/ws"),
+			),
+		),
 	).Start()
 }

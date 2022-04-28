@@ -4,33 +4,23 @@ import (
 	"context"
 	"github.com/gorilla/websocket"
 	"log"
+	"net"
 	"net/http"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
 )
 
 // WebsocketConnector accepts WebSocket client connections,
 // responsible for sending and receiving data with a WebSocket client.
 type WebsocketConnector struct {
-	opts        *WebsocketOptions
-	serveMux    *http.ServeMux
-	server      *http.Server
-	upgrader    *websocket.Upgrader
-	exitSigCh   chan os.Signal // exitSigCh is for receiving SIGINT/SIGTERM signals.
-	serverErrCh chan error     // serverErrCh is for receiving http.ListenAndServe error.
-	mu          sync.RWMutex
-	clients     map[*client]struct{} // clients hold client in connecting.
+	opts     *WebsocketOptions
+	serveMux *http.ServeMux
+	server   *http.Server
+	upgrader *websocket.Upgrader
 }
 
 // NewWebsocketConnector creates a new WebsocketConnector.
 func NewWebsocketConnector(addr string, opts ...WebsocketOption) *WebsocketConnector {
 	c := &WebsocketConnector{
-		opts:        defaultWebsocketOptions(),
-		exitSigCh:   make(chan os.Signal, 1), // Note: signal.Notify requires exitSigCh with buffer size of at least 1.
-		serverErrCh: make(chan error, 1),
-		clients:     make(map[*client]struct{}),
+		opts: defaultWebsocketOptions(),
 	}
 
 	// Apply opts to customize WebsocketConnector.
@@ -39,6 +29,7 @@ func NewWebsocketConnector(addr string, opts ...WebsocketOption) *WebsocketConne
 	}
 
 	// Initialize default values when required fields of WebsocketConnector are not set.
+	// Note: must run after all opts are applied since opts may set the required fields.
 	if c.serveMux == nil {
 		c.serveMux = http.DefaultServeMux
 	}
@@ -55,51 +46,37 @@ func NewWebsocketConnector(addr string, opts ...WebsocketOption) *WebsocketConne
 	return c
 }
 
-// Start http server and block until exit signal or server error is received.
-func (s *WebsocketConnector) Start(ctx context.Context) {
-	defer s.Shutdown()
-
+// Start http server and block until.
+func (s *WebsocketConnector) Start(ctx context.Context) error {
+	// Handle registers the WebsocketConnector.ServeHTTP handler for requests at opts.Path.
 	s.serveMux.Handle(s.opts.Path, s)
 
-	go func() {
-		if s.opts.TLSCertFile != "" || s.opts.TLSKeyFile != "" {
-			s.serverErrCh <- s.server.ListenAndServeTLS(s.opts.TLSCertFile, s.opts.TLSKeyFile)
-		} else {
-			s.serverErrCh <- s.server.ListenAndServe()
-		}
-	}()
-
-	s.blockUntilExitSignalOrServerError()
-}
-
-// blockUntilExitSignalOrServerError will block until receive exit signal or http.ListenAndServe returns with an error.
-func (s *WebsocketConnector) blockUntilExitSignalOrServerError() {
-	// Listen and send to exitSigCh when SIGINT/SIGTERM signal is received.
-	signal.Notify(s.exitSigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case exitSig := <-s.exitSigCh:
-		log.Println("ppcserver: WebsocketConnector.Start() exit due to the signal:", exitSig)
-	case err := <-s.serverErrCh:
-		log.Println("ppcserver: WebsocketConnector.Start() exit due to http.ListenAndServe() error:", err)
+	// BaseContext specifies the ctx as the base context for incoming requests on this server,
+	// which can be used to cancel the long-running http requests (not includes WebSocket connections).
+	s.server.BaseContext = func(_ net.Listener) context.Context {
+		return ctx
 	}
+
+	// ListenAndServe will block or immediately returns with a non-nil error.
+	var err error
+	if s.opts.TLSCertFile != "" || s.opts.TLSKeyFile != "" {
+		err = s.server.ListenAndServeTLS(s.opts.TLSCertFile, s.opts.TLSKeyFile)
+	} else {
+		err = s.server.ListenAndServe()
+	}
+	// ErrServerClosed returns when http.Server.Shutdown() is invoked and does not mean ListenAndServe() fails.
+	if err == http.ErrServerClosed {
+		return nil
+	}
+	return err
 }
 
-func (s *WebsocketConnector) Shutdown() {
-	log.Println("ppcserver: WebsocketConnector.Shutdown() begin")
-
-	// TODO, do we need to add timeout ?
+func (s *WebsocketConnector) Shutdown() error {
+	// TODO, do we need to add timeout to force the shutdown complete ?
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), s.opts.ShutdownTimeout)
 	defer cancel()
 
-	if err := s.server.Shutdown(timeoutCtx); err != nil {
-		log.Println("ppcserver: WebsocketConnector.server.Shutdown() error:", err)
-	}
-
-	// TODO, should we call Close() after Shutdown() ?
-	// _ = s.server.Close()
-
-	log.Println("ppcserver: WebsocketConnector.Shutdown() complete")
+	return s.server.Shutdown(timeoutCtx)
 }
 
 func (s *WebsocketConnector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -132,19 +109,4 @@ func (s *WebsocketConnector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Reference https://pkg.go.dev/github.com/gorilla/websocket#hdr-Concurrency for the concurrency usage details.
 	// go client.writeLoop()
 	// go client.readLoop()
-}
-
-// addClient add client into connections registry clients.
-func (s *WebsocketConnector) addClient(client *client) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.clients[client] = struct{}{}
-}
-
-func (s *WebsocketConnector) removeClient(client *client) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.clients, client)
 }

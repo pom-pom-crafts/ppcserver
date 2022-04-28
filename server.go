@@ -13,9 +13,8 @@ type (
 	ServerOption func(s *Server)
 
 	Component interface {
-		ShouldStartInGoroutine() bool
 		Start(ctx context.Context) error
-		Shutdown()
+		Shutdown() error
 	}
 
 	Server struct {
@@ -35,29 +34,43 @@ func NewServer(opts ...ServerOption) *Server {
 }
 
 func (s *Server) Start() {
-	// close ctx.Done() channel when SIGINT/SIGTERM signal is received.
+	// The ctx.Done channel returns from signal.NotifyContext() will be closed when SIGINT/SIGTERM signal is received.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// The ctx.Done channel returns from errgroup.WithContext() will be closed when SIGINT/SIGTERM signal is received,
+	// or the first time any Component.Start() method which passed to g.Go() returns a non-nil error,
+	// or g.Wait() returns, whichever occurs first.
 	g, ctx := errgroup.WithContext(ctx)
 	for _, c := range s.components {
-		if c.ShouldStartInGoroutine() {
-			g.Go(
-				func() error {
-					return c.Start(ctx)
-				},
-			)
-		}
-	}
+		// g.Go(f func() error) runs each f in a goroutine.
+		g.Go(
+			func() error {
+				// TODO, should we recover panic and log with error here?
 
+				// Component.Start() may block here, and its implementation should return when ctx.Done is closed.
+				log.Printf("ppcserver: starting component: %T", c)
+				return c.Start(ctx)
+			},
+		)
+		g.Go(
+			func() error {
+				// Component.Shutdown() will not be invoked until ctx.Done is closed.
+				<-ctx.Done()
+				log.Printf("ppcserver: shutting down component: %T", c)
+				return c.Shutdown()
+			},
+		)
+	}
+	// g.Wait() waits until all the blocking functions in g.Go() returns.
 	if err := g.Wait(); err != nil {
-		log.Println("ppcserver: Server.Start() returns with error:", err)
+		log.Println("ppcserver: server shutdown with error:", err)
 	} else {
-		log.Println("ppcserver: Server.Start() returns")
+		log.Println("ppcserver: server shutdown successfully")
 	}
 }
 
-// WithComponent is a ServerOption to register a Component to Server.
+// WithComponent is a ServerOption to register a Component to Server.components.
 func WithComponent(c Component) ServerOption {
 	return func(s *Server) {
 		s.components = append(s.components, c)
