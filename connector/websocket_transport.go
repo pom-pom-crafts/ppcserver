@@ -2,9 +2,7 @@ package connector
 
 import (
 	"github.com/gorilla/websocket"
-	"log"
 	"net"
-	"sync"
 	"time"
 )
 
@@ -22,18 +20,15 @@ type (
 	// websocketTransport is a wrapper struct over websocket connection to fit Transport
 	// interface so client will accept it.
 	websocketTransport struct {
-		conn     *websocket.Conn
-		opts     *websocketTransportOptions
-		mu       sync.RWMutex
-		isClosed bool
+		conn *websocket.Conn
+		opts *websocketTransportOptions
 	}
 )
 
 func newWebsocketTransport(conn *websocket.Conn, opts *websocketTransportOptions) *websocketTransport {
 	transport := &websocketTransport{
-		conn:     conn,
-		opts:     opts,
-		isClosed: false,
+		conn: conn,
+		opts: opts,
 	}
 
 	return transport
@@ -47,6 +42,11 @@ func (t *websocketTransport) ProtocolType() TransportProtocolType {
 // NetConn returns the internal net.Conn of the connection.
 func (t *websocketTransport) NetConn() net.Conn {
 	return t.conn.UnderlyingConn()
+}
+
+func (t *websocketTransport) Read() ([]byte, error) {
+	_, message, err := t.conn.ReadMessage()
+	return message, err
 }
 
 // Write data to websocket.Conn.
@@ -68,45 +68,8 @@ func (t *websocketTransport) Write(data []byte) error {
 	return nil
 }
 
+// Close closes the underlying network connection.
+// It can be called concurrently, and it's OK to call Close more than once.
 func (t *websocketTransport) Close() error {
-	t.mu.Lock()
-
-	if t.isClosed {
-		t.mu.Unlock()
-		return nil
-	}
-
-	t.isClosed = true
-	t.mu.Unlock()
-
-	return nil
-}
-
-func (t *websocketTransport) writeLoop() {
-
-}
-
-func (t *websocketTransport) readLoop() {
-	defer func() {
-		// TODO, notify client to remove it from WebSocketServer.
-		// c.hub.unregister <- c
-		t.conn.Close()
-	}()
-
-	for {
-		_, message, err := t.conn.ReadMessage()
-
-		// Exit readLoop on ReadMessage returns any error.
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("ppcserver: websocket.Conn.ReadMessage() error: %v", err)
-			}
-			break
-		}
-
-		log.Println("ppcserver: websocket.Conn.ReadMessage() receive:", message)
-
-		// TODO, notify client that new message has arrived.
-		// c.hub.broadcast <- message
-	}
+	return t.conn.Close()
 }

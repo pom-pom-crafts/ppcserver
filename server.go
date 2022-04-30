@@ -64,9 +64,9 @@ func (s *Server) Start() {
 	}
 	// g.Wait() waits until all the blocking functions in g.Go() returns.
 	if err := g.Wait(); err != nil {
-		log.Println("ppcserver: server shutdown with error:", err)
+		log.Println("ppcserver: server shutdown complete with error:", err)
 	} else {
-		log.Println("ppcserver: server shutdown successfully")
+		log.Println("ppcserver: server shutdown complete")
 	}
 }
 
