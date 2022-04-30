@@ -83,7 +83,7 @@ func (s *WebsocketConnector) Start(ctx context.Context) error {
 				writeTimeout:   s.opts.WriteTimeout,
 				maxMessageSize: s.opts.MaxMessageSize,
 			}
-			client := newClient(newWebsocketTransport(conn, transportOpts))
+			client := NewClient(newWebsocketTransport(conn, transportOpts))
 
 			s.clientsWg.Add(1)
 			defer s.clientsWg.Done()

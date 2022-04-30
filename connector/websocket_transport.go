@@ -18,7 +18,7 @@ type (
 	}
 
 	// websocketTransport is a wrapper struct over websocket connection to fit Transport
-	// interface so client will accept it.
+	// interface so Client will accept it.
 	websocketTransport struct {
 		conn *websocket.Conn
 		opts *websocketTransportOptions

@@ -8,25 +8,20 @@ import (
 
 const (
 	// ClientStateConnected represents a new connection that is waiting for the auth message from the peer.
-	// A client instance begins at this state and then transition to either ClientStateAuthorized or ClientStateClosed.
+	// A Client instance begins at this state and then transition to either ClientStateAuthorized or ClientStateClosed.
 	ClientStateConnected ClientState = iota
 	ClientStateAuthorized
 	// ClientStateClosed represents a closed connection. This is a terminal state.
-	// After entering this state, a client instance will not receive any message and can not send any message.
+	// After entering this state, a Client instance will not receive any message and can not send any message.
 	ClientStateClosed
 )
 
 type (
-	// ClientState represents the state of a client instance, uint8 is used for save memory usage.
+	// ClientState represents the state of a Client instance, uint8 is used for save memory usage.
 	ClientState uint8
 
-	// Client represents a client connection to a server.
-	Client interface {
-		Write(data []byte) error
-		Close() error
-	}
-
-	client struct {
+	// Client represents a Client connection to a server.
+	Client struct {
 		transport Transport
 		mu        sync.Mutex  // mu guards state.
 		state     ClientState // state is guarded by mu.
@@ -35,19 +30,25 @@ type (
 	}
 )
 
-// newClient creates a new client.
-func newClient(transport Transport) *client {
-	c := &client{
+// NewClient creates a new Client with ClientStateConnected as the initial state.
+func NewClient(transport Transport) *Client {
+	c := &Client{
 		transport: transport,
 		state:     ClientStateConnected,
-		readCh:    make(chan []byte),
+		readCh:    make(chan []byte),      // TODO, what is the buffer size?
 		writeCh:   make(chan []byte, 256), // TODO, buffer size is configurable
 	}
-
 	return c
 }
 
-func (c *client) Write(data []byte) error {
+// State returns the current state of the Client.
+func (c *Client) State() ClientState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.state
+}
+
+func (c *Client) Write(data []byte) error {
 	if err := c.transport.Write(data); err != nil {
 		return err
 	}
@@ -55,13 +56,13 @@ func (c *client) Write(data []byte) error {
 }
 
 // Close closes the connection with the peer.
-func (c *client) Close() (err error) {
+func (c *Client) Close() (err error) {
 	defer func() {
 		if err != nil {
-			log.Println("ppcserver: client.Close() error:", err)
+			log.Println("ppcserver: Client.Close() error:", err)
 			return
 		}
-		log.Println("ppcserver: client.Close()")
+		log.Println("ppcserver: Client.Close()")
 	}()
 
 	// Change to the closed state should be guarded by mu. Skip if already in the closed state.
@@ -81,7 +82,7 @@ func (c *client) Close() (err error) {
 	return c.transport.Close()
 }
 
-// func (c *client) handleConnection() {
+// func (c *Client) handleConnection() {
 // 	if !allowToConnect() {
 // 		c.Close()
 // 		return
@@ -94,44 +95,42 @@ func (c *client) Close() (err error) {
 // 	go c.writeLoop()
 // }
 
-func (c *client) heartbeat() {
+func (c *Client) heartbeat() {
 
 }
 
 // readLoop.
 // The application must runs readLoop in a per-connection goroutine.
 // The application ensures that there is at most one reader on a connection by executing all reads from this goroutine.
-func (c *client) readLoop(ctx context.Context) {
+func (c *Client) readLoop(ctx context.Context) {
 	defer c.Close()
 
 	for {
+		// TODO, here we actually use read timeout to break the loop
+
+		message, err := c.transport.Read()
+
+		// Exit readLoop once Read returns any error.
+		if err != nil {
+			log.Printf("ppcserver: Client.transport.Read() error: %v", err)
+			return
+		}
+
+		log.Printf("ppcserver: Client.transport.Read() receive: %s", message)
+
 		select {
 		case <-ctx.Done():
-			log.Println("ppcserver: client.readLoop() exit due to ctx.Done channel is closed")
+			log.Println("ppcserver: Client.readLoop() exit due to ctx.Done channel is closed")
 			return // Caution: use 'return' instead of 'break' to exit the for loop.
+		// TODO, send to readCh, block when readCh is full
+		// case c.readCh <- message:
 		default:
-			message, err := c.transport.Read()
-
-			// Exit readLoop once Read returns any error.
-			if err != nil {
-				log.Printf("ppcserver: client.transport.Read() error: %v", err)
-				return // Caution: use 'return' instead of 'break' to exit the for loop.
-			}
-
-			log.Printf("ppcserver: client.transport.Read() receive: %s", message)
-
-			// TODO, send to readCh, block when readCh is full
-			// select {
-			// case <-ctx.Done():
-			// 	return
-			// case c.readCh <- message:
-			// }
 		}
 	}
 
 	// TODO, wait auth request from the peer.
 }
 
-func (c *client) writeLoop() {
+func (c *Client) writeLoop() {
 
 }
