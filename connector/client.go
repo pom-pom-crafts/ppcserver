@@ -7,15 +7,17 @@ import (
 )
 
 const (
-	// ClientStateConnected is the state when the connection has established,
-	// and the server is waiting for the auth message from the peer.
+	// ClientStateConnected represents a new connection that is waiting for the auth message from the peer.
+	// A client instance begins at this state and then transition to either ClientStateAuthorized or ClientStateClosed.
 	ClientStateConnected ClientState = iota
 	ClientStateAuthorized
+	// ClientStateClosed represents a closed connection. This is a terminal state.
+	// After entering this state, a client instance will not receive any message and can not send any message.
 	ClientStateClosed
 )
 
 type (
-	// ClientState represents the state of the client, uint8 is used for save memory usage.
+	// ClientState represents the state of a client instance, uint8 is used for save memory usage.
 	ClientState uint8
 
 	// Client represents a client connection to a server.
@@ -92,6 +94,10 @@ func (c *client) Close() (err error) {
 // 	go c.writeLoop()
 // }
 
+func (c *client) heartbeat() {
+
+}
+
 // readLoop.
 // The application must runs readLoop in a per-connection goroutine.
 // The application ensures that there is at most one reader on a connection by executing all reads from this goroutine.
@@ -101,6 +107,7 @@ func (c *client) readLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("ppcserver: client.readLoop() exit due to ctx.Done channel is closed")
 			return // Caution: use 'return' instead of 'break' to exit the for loop.
 		default:
 			message, err := c.transport.Read()
@@ -111,9 +118,14 @@ func (c *client) readLoop(ctx context.Context) {
 				return // Caution: use 'return' instead of 'break' to exit the for loop.
 			}
 
-			log.Printf("ppcserver: client.transport.Read() receive: %v", message)
-			// TODO, send to readCh
-			// c.readCh <- message
+			log.Printf("ppcserver: client.transport.Read() receive: %s", message)
+
+			// TODO, send to readCh, block when readCh is full
+			// select {
+			// case <-ctx.Done():
+			// 	return
+			// case c.readCh <- message:
+			// }
 		}
 	}
 

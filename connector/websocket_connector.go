@@ -86,15 +86,15 @@ func (s *WebsocketConnector) Start(ctx context.Context) error {
 			client := newClient(newWebsocketTransport(conn, transportOpts))
 
 			s.clientsWg.Add(1)
+			defer s.clientsWg.Done()
 
 			// Since per connection support only one concurrent reader and one concurrent writer,
-			// we execute all writes from the `writeLoop` goroutine and all reads from the `readLoop` goroutine.
+			// we execute all writes from the `writeLoop` goroutine and all reads from the current goroutine.
 			// Reference https://pkg.go.dev/github.com/gorilla/websocket#hdr-Concurrency for the concurrency usage details.
 			// go client.writeLoop()
-			go func() {
-				client.readLoop(ctx) // Note: ctx passes in for closing the connection when the server is shutting down.
-				s.clientsWg.Done()
-			}()
+			client.readLoop(ctx) // Note: ctx passes in for closing the connection when the server is shutting down.
+
+			// r.WithContext()
 		},
 	)
 
@@ -120,8 +120,11 @@ func (s *WebsocketConnector) Shutdown() error {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), s.opts.ShutdownTimeout)
 	defer cancel()
 
+	if err := s.server.Shutdown(timeoutCtx); err != nil {
+		return err
+	}
+
 	// TODO, does it really need to wait for all the clients Close complete.
 	s.clientsWg.Wait()
-
-	return s.server.Shutdown(timeoutCtx)
+	return nil
 }
