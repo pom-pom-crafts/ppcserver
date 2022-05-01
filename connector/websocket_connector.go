@@ -52,17 +52,17 @@ func NewWebsocketConnector(addr string, opts ...WebsocketOption) *WebsocketConne
 // and block until the server is closed.
 // A ctx (which will cancel when the server is shutting down) is required
 // for gracefully shutting down the HTTP server and actively closing all the WebSocket connections.
-func (s *WebsocketConnector) Start(ctx context.Context) error {
+func (c *WebsocketConnector) Start(ctx context.Context) error {
 	// BaseContext specifies the ctx as the base context for incoming requests on this server,
 	// which can be used to cancel the long-running HTTP requests and also the WebSocket connections.
-	s.server.BaseContext = func(_ net.Listener) context.Context {
+	c.server.BaseContext = func(_ net.Listener) context.Context {
 		return ctx
 	}
 
 	// HandleFunc registers the handler for processing WebSocket connection requests at opts.Path.
-	s.serveMux.HandleFunc(
-		s.opts.Path, func(w http.ResponseWriter, r *http.Request) {
-			conn, err := s.upgrader.Upgrade(w, r, nil)
+	c.serveMux.HandleFunc(
+		c.opts.Path, func(w http.ResponseWriter, r *http.Request) {
+			conn, err := c.upgrader.Upgrade(w, r, nil)
 
 			// Note: upgrader.Upgrade will reply to the client with an HTTP error when it returns an error.
 			if err != nil {
@@ -70,24 +70,24 @@ func (s *WebsocketConnector) Start(ctx context.Context) error {
 				return
 			}
 
-			if s.opts.MaxMessageSize > 0 {
-				conn.SetReadLimit(s.opts.MaxMessageSize)
+			if c.opts.MaxMessageSize > 0 {
+				conn.SetReadLimit(c.opts.MaxMessageSize)
 			}
 
 			// TODO, wait pong
 			// conn.SetReadDeadline(time.Now().Add(0))
 			// c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
-			s.clientsWg.Add(1)
-			defer s.clientsWg.Done()
+			c.clientsWg.Add(1)
+			defer c.clientsWg.Done()
 
 			if err := StartClient(
 				// Note: ctx passes in for closing the connection gracefully when the server is shutting down.
 				ctx, newWebsocketTransport(
 					conn, &websocketTransportOptions{
 						encodingType:   EncodingTypeJSON, // TODO, encodingType depends
-						writeTimeout:   s.opts.WriteTimeout,
-						maxMessageSize: s.opts.MaxMessageSize,
+						writeTimeout:   c.opts.WriteTimeout,
+						maxMessageSize: c.opts.MaxMessageSize,
 					},
 				),
 			); err != nil {
@@ -100,10 +100,10 @@ func (s *WebsocketConnector) Start(ctx context.Context) error {
 	// such as when WebsocketConnector.Shutdown() is invoked,
 	// or when PORT is already in-used.
 	var err error
-	if s.opts.TLSCertFile != "" || s.opts.TLSKeyFile != "" {
-		err = s.server.ListenAndServeTLS(s.opts.TLSCertFile, s.opts.TLSKeyFile)
+	if c.opts.TLSCertFile != "" || c.opts.TLSKeyFile != "" {
+		err = c.server.ListenAndServeTLS(c.opts.TLSCertFile, c.opts.TLSKeyFile)
 	} else {
-		err = s.server.ListenAndServe()
+		err = c.server.ListenAndServe()
 	}
 	// ErrServerClosed returns on calling http.Server.Shutdown() and does not mean ListenAndServe() fails,
 	// so we return a nil error; for the other errors we return as is.
@@ -113,16 +113,16 @@ func (s *WebsocketConnector) Start(ctx context.Context) error {
 	return err
 }
 
-func (s *WebsocketConnector) Shutdown() error {
+func (c *WebsocketConnector) Shutdown() error {
 	// TODO, do we need to add timeout to force the shutdown complete ?
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), s.opts.ShutdownTimeout)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), c.opts.ShutdownTimeout)
 	defer cancel()
 
-	if err := s.server.Shutdown(timeoutCtx); err != nil {
+	if err := c.server.Shutdown(timeoutCtx); err != nil {
 		return err
 	}
 
 	// TODO, does it really need to wait for all the clients Close complete.
-	s.clientsWg.Wait()
+	c.clientsWg.Wait()
 	return nil
 }

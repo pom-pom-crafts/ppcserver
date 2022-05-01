@@ -28,8 +28,9 @@ type (
 	// Client represents a Client connection to a server.
 	Client struct {
 		transport Transport
-		mu        sync.Mutex  // mu guards state.
-		state     ClientState // state is guarded by mu.
+		mu        sync.Mutex         // mu guards state.
+		state     ClientState        // state is guarded by mu.
+		cancelCtx context.CancelFunc // cancelCtx cancels the Client-level context that creates inside StartClient and result in Client.Close() being called.
 		readCh    chan []byte
 		writeCh   chan []byte // writeCh is the buffered channel of messages waiting to write to the transport.
 	}
@@ -47,9 +48,15 @@ func StartClient(ctx context.Context, transport Transport) error {
 		return ErrExceedMaxClients
 	}
 
+	// The ctx.Done channel returns from context.WithCancel() is closed when the cancelCtx() function is called
+	// or when the parent context's Done channel is closed, whichever happens first.
+	ctx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx() // Call cancelCtx when StartClient exits to ensure the current Client's resources are released.
+
 	c := &Client{
 		transport: transport,
 		state:     ClientStateConnected,
+		cancelCtx: cancelCtx,
 		readCh:    make(chan []byte),      // TODO, what is the buffer size?
 		writeCh:   make(chan []byte, 256), // TODO, buffer size is configurable
 	}
@@ -68,10 +75,13 @@ func StartClient(ctx context.Context, transport Transport) error {
 	// }
 
 	// Since per connection support only one concurrent reader and one concurrent writer,
-	// we execute all writes from the `writeLoop` goroutine and all reads from the current goroutine.
+	// we execute all writes from the `writeLoop` goroutine and all reads from the `readLoop` goroutine.
 	// Reference https://pkg.go.dev/github.com/gorilla/websocket#hdr-Concurrency for the concurrency usage details.
 	go c.writeLoop(ctx)
-	c.readLoop(ctx) // Note: readLoop blocks until read has error or ctx is closed.
+	go c.readLoop(ctx)
+
+	// Block StartClient until ctx.Done channel is closed.
+	<-ctx.Done()
 	return nil
 }
 
@@ -82,7 +92,7 @@ func (c *Client) Close() (err error) {
 			log.Println("ppcserver: Client.Close() error:", err)
 			return
 		}
-		log.Println("ppcserver: Client.Close()")
+		log.Println("ppcserver: Client.Close() complete")
 	}()
 
 	// Change to the closed state should be guarded by mu. Skip if already in the closed state.
@@ -102,16 +112,18 @@ func (c *Client) Close() (err error) {
 	return c.transport.Close()
 }
 
-// readLoop.
-// The application must runs readLoop in a per-connection goroutine.
-// The application ensures that there is at most one reader on a connection by executing all reads from this goroutine.
+// readLoop keep reading from the transport until transport.Read() errored.
+// The connection must be closed When readLoop exits by calling cancelCtx().
+// readLoop must execute by a single goroutine to ensure that there is at most one concurrent reader on a connection.
 func (c *Client) readLoop(ctx context.Context) {
+	defer c.cancelCtx()
+
 	for {
 		// TODO, here we actually use read timeout to break the loop
 
 		message, err := c.transport.Read()
 
-		// Exit readLoop once Read returns any error.
+		// The connection must be closed once Read returns any error.
 		if err != nil {
 			log.Printf("ppcserver: Client.transport.Read() error: %v", err)
 			return
@@ -119,10 +131,10 @@ func (c *Client) readLoop(ctx context.Context) {
 
 		log.Printf("ppcserver: Client.transport.Read() receive: %s", message)
 
+		// Caution: selects the `ctx.Done` case to ensure not sending on a closed readCh, which will cause panic.
 		select {
 		case <-ctx.Done():
-			log.Println("ppcserver: Client.readLoop() exit due to ctx.Done channel is closed")
-			return // Caution: use 'return' instead of 'break' to exit the for loop.
+			return // Caution: should not 'break' be used which will only exit `select` rather than `for`.
 		// TODO, send to readCh, block when readCh is full
 		// case c.readCh <- message:
 		default:
