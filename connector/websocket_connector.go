@@ -78,23 +78,21 @@ func (s *WebsocketConnector) Start(ctx context.Context) error {
 			// conn.SetReadDeadline(time.Now().Add(0))
 			// c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
-			transportOpts := &websocketTransportOptions{
-				encodingType:   EncodingTypeJSON, // TODO, encodingType depends
-				writeTimeout:   s.opts.WriteTimeout,
-				maxMessageSize: s.opts.MaxMessageSize,
-			}
-			client := NewClient(newWebsocketTransport(conn, transportOpts))
-
 			s.clientsWg.Add(1)
 			defer s.clientsWg.Done()
 
-			// Since per connection support only one concurrent reader and one concurrent writer,
-			// we execute all writes from the `writeLoop` goroutine and all reads from the current goroutine.
-			// Reference https://pkg.go.dev/github.com/gorilla/websocket#hdr-Concurrency for the concurrency usage details.
-			// go client.writeLoop()
-			client.readLoop(ctx) // Note: ctx passes in for closing the connection when the server is shutting down.
-
-			// r.WithContext()
+			if err := StartClient(
+				// Note: ctx passes in for closing the connection gracefully when the server is shutting down.
+				ctx, newWebsocketTransport(
+					conn, &websocketTransportOptions{
+						encodingType:   EncodingTypeJSON, // TODO, encodingType depends
+						writeTimeout:   s.opts.WriteTimeout,
+						maxMessageSize: s.opts.MaxMessageSize,
+					},
+				),
+			); err != nil {
+				log.Println("ppcserver: StartClient() error:", err)
+			}
 		},
 	)
 

@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 )
@@ -14,6 +15,10 @@ const (
 	// ClientStateClosed represents a closed connection. This is a terminal state.
 	// After entering this state, a Client instance will not receive any message and can not send any message.
 	ClientStateClosed
+)
+
+var (
+	ErrExceedMaxClients = errors.New("ppcserver: exceed maximum number of clients")
 )
 
 type (
@@ -30,28 +35,43 @@ type (
 	}
 )
 
-// NewClient creates a new Client with ClientStateConnected as the initial state.
-func NewClient(transport Transport) *Client {
+// StartClient creates a new Client with ClientStateConnected as the initial state,
+//
+func StartClient(ctx context.Context, transport Transport) error {
+	if ExceedMaxClients() {
+		// TODO, do we need to send special reason when close the transport
+		if err := transport.Close(); err != nil {
+			log.Println("ppcserver: exceed max clients in StartClient then call transport.Close() error:", err)
+			return nil
+		}
+		return ErrExceedMaxClients
+	}
+
 	c := &Client{
 		transport: transport,
 		state:     ClientStateConnected,
 		readCh:    make(chan []byte),      // TODO, what is the buffer size?
 		writeCh:   make(chan []byte, 256), // TODO, buffer size is configurable
 	}
-	return c
-}
 
-// State returns the current state of the Client.
-func (c *Client) State() ClientState {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.state
-}
+	defer func() {
+		decrNumClients()
+		_ = c.Close()
+	}()
+	incrNumClients()
 
-func (c *Client) Write(data []byte) error {
-	if err := c.transport.Write(data); err != nil {
-		return err
-	}
+	// if !allowToConnect() {
+	// 	return
+	// }
+	// if err := handshake(); err != nil {
+	// 	return
+	// }
+
+	// Since per connection support only one concurrent reader and one concurrent writer,
+	// we execute all writes from the `writeLoop` goroutine and all reads from the current goroutine.
+	// Reference https://pkg.go.dev/github.com/gorilla/websocket#hdr-Concurrency for the concurrency usage details.
+	go c.writeLoop(ctx)
+	c.readLoop(ctx) // Note: readLoop blocks until read has error or ctx is closed.
 	return nil
 }
 
@@ -82,29 +102,10 @@ func (c *Client) Close() (err error) {
 	return c.transport.Close()
 }
 
-// func (c *Client) handleConnection() {
-// 	if !allowToConnect() {
-// 		c.Close()
-// 		return
-// 	}
-// 	if err := handshake(); err != nil {
-// 		c.Close()
-// 		return
-// 	}
-// 	go c.readLoop()
-// 	go c.writeLoop()
-// }
-
-func (c *Client) heartbeat() {
-
-}
-
 // readLoop.
 // The application must runs readLoop in a per-connection goroutine.
 // The application ensures that there is at most one reader on a connection by executing all reads from this goroutine.
 func (c *Client) readLoop(ctx context.Context) {
-	defer c.Close()
-
 	for {
 		// TODO, here we actually use read timeout to break the loop
 
@@ -131,6 +132,24 @@ func (c *Client) readLoop(ctx context.Context) {
 	// TODO, wait auth request from the peer.
 }
 
-func (c *Client) writeLoop() {
+func (c *Client) writeLoop(ctx context.Context) {
+
+}
+
+// State returns the current state of the Client.
+func (c *Client) State() ClientState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.state
+}
+
+func (c *Client) Write(data []byte) error {
+	if err := c.transport.Write(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) heartbeat() {
 
 }
