@@ -124,16 +124,12 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 	return err
 }
 
-func (c *WebsocketConnector) Shutdown() error {
-	// TODO, do we need to add timeout to force the shutdown complete ?
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), c.opts.ShutdownTimeout)
-	defer cancel()
-
-	if err := c.server.Shutdown(timeoutCtx); err != nil {
+func (c *WebsocketConnector) Shutdown(ctx context.Context) error {
+	if err := c.server.Shutdown(ctx); err != nil {
 		return err
 	}
 
-	// TODO, does it really need to wait for all the clients Close complete.
+	// Wait for all the clients' Close complete.
 	c.clientsWg.Wait()
 	return nil
 }

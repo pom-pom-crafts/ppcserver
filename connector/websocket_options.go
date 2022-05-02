@@ -16,10 +16,6 @@ type (
 		// Defaults to "/" if not set through WithWebsocketPath.
 		Path string
 
-		// ShutdownTimeout is the maximum time for WebsocketConnector.Shutdown() to complete.
-		// Defaults to 10 seconds if not set through WithShutdownTimeout.
-		ShutdownTimeout time.Duration
-
 		// WriteTimeout is the maximum time of write message operation.
 		// Slow client will be disconnected.
 		// Defaults to 1 second if not set through WithWriteTimeout.
@@ -39,10 +35,9 @@ type (
 
 func defaultWebsocketOptions() *WebsocketOptions {
 	return &WebsocketOptions{
-		Path:            "/",
-		ShutdownTimeout: 10 * time.Second,
-		WriteTimeout:    1 * time.Second,
-		MaxMessageSize:  65536,
+		Path:           "/",
+		WriteTimeout:   1 * time.Second,
+		MaxMessageSize: 65536,
 	}
 }
 
@@ -50,13 +45,6 @@ func defaultWebsocketOptions() *WebsocketOptions {
 func WithWebsocketPath(path string) WebsocketOption {
 	return func(s *WebsocketConnector) {
 		s.opts.Path = path
-	}
-}
-
-// WithShutdownTimeout is a WebsocketOption to set the maximum time for WebsocketConnector.Shutdown() to complete.
-func WithShutdownTimeout(shutdownTimeout time.Duration) WebsocketOption {
-	return func(s *WebsocketConnector) {
-		s.opts.ShutdownTimeout = shutdownTimeout
 	}
 }
 

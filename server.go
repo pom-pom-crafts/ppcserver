@@ -6,24 +6,41 @@ import (
 	"log"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 type (
 	// ServerOption is a function to apply various configurations to customize a Server.
 	ServerOption func(s *Server)
 
+	// ServerOptions defines the configurable opts of the Server.
+	ServerOptions struct {
+		// ShutdownTimeout is the maximum time for Component.Shutdown() to complete.
+		// Defaults to 1 minute if not set through WithShutdownTimeout.
+		ShutdownTimeout time.Duration
+	}
+
 	Component interface {
 		Start(ctx context.Context) error
-		Shutdown() error
+		Shutdown(ctx context.Context) error
 	}
 
 	Server struct {
+		opts       *ServerOptions
 		components []Component
 	}
 )
 
+func defaultServerOptions() *ServerOptions {
+	return &ServerOptions{
+		ShutdownTimeout: 1 * time.Minute,
+	}
+}
+
 func NewServer(opts ...ServerOption) *Server {
-	s := &Server{}
+	s := &Server{
+		opts: defaultServerOptions(),
+	}
 
 	// Apply opts to customize Server.
 	for _, opt := range opts {
@@ -58,7 +75,20 @@ func (s *Server) Start() {
 				// Component.Shutdown() will not be invoked until ctx.Done is closed.
 				<-ctx.Done()
 				log.Printf("ppcserver: shutting down component: %T", c)
-				return c.Shutdown()
+
+				// This goroutine returns when either Component.Shutdown() is complete before ShutdownTimeout,
+				// or the ShutdownTimeout has passed.
+				timeoutCtx, cancel := context.WithTimeout(context.Background(), s.opts.ShutdownTimeout)
+				defer cancel()
+
+				// Caution: buffer size should not be zero or c.Shutdown() would block forever.
+				shutdownErrCh := make(chan error, 1)
+				select {
+				case <-timeoutCtx.Done():
+					return timeoutCtx.Err()
+				case shutdownErrCh <- c.Shutdown(timeoutCtx):
+					return <-shutdownErrCh
+				}
 			},
 		)
 	}
@@ -74,5 +104,12 @@ func (s *Server) Start() {
 func WithComponent(c Component) ServerOption {
 	return func(s *Server) {
 		s.components = append(s.components, c)
+	}
+}
+
+// WithShutdownTimeout is a ServerOption to set the maximum time for each Component.Shutdown() to complete.
+func WithShutdownTimeout(d time.Duration) ServerOption {
+	return func(s *Server) {
+		s.opts.ShutdownTimeout = d
 	}
 }
