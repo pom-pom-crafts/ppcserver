@@ -2,6 +2,7 @@ package ppcserver
 
 import (
 	"context"
+	"fmt"
 	"golang.org/x/sync/errgroup"
 	"log"
 	"os/signal"
@@ -85,10 +86,10 @@ func (s *Server) Start() {
 				shutdownErrCh := make(chan error, 1)
 				select {
 				case <-timeoutCtx.Done():
-					return timeoutCtx.Err()
+					shutdownErrCh <- timeoutCtx.Err()
 				case shutdownErrCh <- c.Shutdown(timeoutCtx):
-					return <-shutdownErrCh
 				}
+				return fmt.Errorf("ppcserver: %T.Shutdown() error: %w", c, <-shutdownErrCh)
 			},
 		)
 	}
