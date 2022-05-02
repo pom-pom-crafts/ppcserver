@@ -70,6 +70,9 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 				return
 			}
 
+			// Ensure the connection is closed when the current function exits.
+			defer conn.Close()
+
 			if c.opts.MaxMessageSize > 0 {
 				conn.SetReadLimit(c.opts.MaxMessageSize)
 			}

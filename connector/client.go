@@ -3,6 +3,8 @@ package connector
 import (
 	"context"
 	"errors"
+	"fmt"
+	"golang.org/x/sync/errgroup"
 	"log"
 	"sync"
 )
@@ -28,9 +30,8 @@ type (
 	// Client represents a Client connection to a server.
 	Client struct {
 		transport Transport
-		mu        sync.Mutex         // mu guards state.
-		state     ClientState        // state is guarded by mu.
-		cancelCtx context.CancelFunc // cancelCtx cancels the Client-level context that creates inside StartClient and result in Client.Close() being called.
+		mu        sync.Mutex  // mu guards state.
+		state     ClientState // state is guarded by mu.
 		readCh    chan []byte
 		writeCh   chan []byte // writeCh is the buffered channel of messages waiting to write to the transport.
 	}
@@ -47,25 +48,15 @@ func StartClient(ctx context.Context, transport Transport) error {
 		}
 		return ErrExceedMaxClients
 	}
-
-	// The ctx.Done channel returns from context.WithCancel() is closed when the cancelCtx() function is called
-	// or when the parent context's Done channel is closed, whichever happens first.
-	ctx, cancelCtx := context.WithCancel(ctx)
-	defer cancelCtx() // Call cancelCtx when StartClient exits to ensure the current Client's resources are released.
+	incrNumClients()
+	defer decrNumClients()
 
 	c := &Client{
 		transport: transport,
 		state:     ClientStateConnected,
-		cancelCtx: cancelCtx,
 		readCh:    make(chan []byte),      // TODO, what is the buffer size?
 		writeCh:   make(chan []byte, 256), // TODO, buffer size is configurable
 	}
-
-	defer func() {
-		decrNumClients()
-		_ = c.Close()
-	}()
-	incrNumClients()
 
 	// if !allowToConnect() {
 	// 	return
@@ -74,15 +65,30 @@ func StartClient(ctx context.Context, transport Transport) error {
 	// 	return
 	// }
 
+	// The ctx.Done channel returns from errgroup.WithContext() will be closed
+	// when the first time either writeLoop or readLoop passed to g.Go() returns a non-nil error,
+	// or g.Wait() returns, whichever occurs first.
+	g, ctx := errgroup.WithContext(ctx)
 	// Since per connection support only one concurrent reader and one concurrent writer,
 	// we execute all writes from the `writeLoop` goroutine and all reads from the `readLoop` goroutine.
 	// Reference https://pkg.go.dev/github.com/gorilla/websocket#hdr-Concurrency for the concurrency usage details.
-	go c.writeLoop(ctx)
-	go c.readLoop(ctx)
+	g.Go(
+		func() error {
+			return c.writeLoop(ctx)
+		},
+	)
+	g.Go(
+		func() error {
+			return c.readLoop(ctx)
+		},
+	)
 
-	// Block StartClient until ctx.Done channel is closed.
+	// Actively close the connection when ctx.Done channel is closed to force readLoop exits.
 	<-ctx.Done()
-	return nil
+	_ = c.Close()
+
+	// Block until both readLoop and writeLoop exit to achieve a graceful shutdown of the Client.
+	return g.Wait()
 }
 
 // Close closes the connection with the peer.
@@ -104,9 +110,6 @@ func (c *Client) Close() (err error) {
 	c.state = ClientStateClosed
 	c.mu.Unlock()
 
-	// Close the readCh to notify readers to stop reading from it.
-	close(c.readCh)
-
 	// transport.Close() closes the underlying network connection.
 	// It can be called concurrently, and it's OK to call Close more than once.
 	return c.transport.Close()
@@ -115,8 +118,10 @@ func (c *Client) Close() (err error) {
 // readLoop keep reading from the transport until transport.Read() errored.
 // The connection must be closed When readLoop exits by calling cancelCtx().
 // readLoop must execute by a single goroutine to ensure that there is at most one concurrent reader on a connection.
-func (c *Client) readLoop(ctx context.Context) {
-	defer c.cancelCtx()
+func (c *Client) readLoop(ctx context.Context) error {
+	// The readLoop method is the only sender on readCh,
+	// so we Close the readCh here to ensure not sending on the closed readCh channel.
+	defer close(c.readCh)
 
 	for {
 		// TODO, here we actually use read timeout to break the loop
@@ -125,27 +130,20 @@ func (c *Client) readLoop(ctx context.Context) {
 
 		// The connection must be closed once Read returns any error.
 		if err != nil {
-			log.Printf("ppcserver: Client.transport.Read() error: %v", err)
-			return
+			return fmt.Errorf("ppcserver: Client.transport.Read() error: %w", err)
 		}
 
 		log.Printf("ppcserver: Client.transport.Read() receive: %s", message)
 
-		// Caution: selects the `ctx.Done` case to ensure not sending on a closed readCh, which will cause panic.
-		select {
-		case <-ctx.Done():
-			return // Caution: should not 'break' be used which will only exit `select` rather than `for`.
 		// TODO, send to readCh, block when readCh is full
 		// case c.readCh <- message:
-		default:
-		}
 	}
 
 	// TODO, wait auth request from the peer.
 }
 
-func (c *Client) writeLoop(ctx context.Context) {
-
+func (c *Client) writeLoop(ctx context.Context) error {
+	return nil
 }
 
 // State returns the current state of the Client.
