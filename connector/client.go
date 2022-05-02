@@ -30,8 +30,9 @@ type (
 	// Client represents a Client connection to a server.
 	Client struct {
 		transport Transport
-		mu        sync.Mutex  // mu guards state.
-		state     ClientState // state is guarded by mu.
+		mu        sync.Mutex         // mu guards state.
+		state     ClientState        // state is guarded by mu.
+		cancelCtx context.CancelFunc // cancelCtx cancels the Client-level context that creates inside StartClient and result in Client.Close() being called.
 		readCh    chan []byte
 		writeCh   chan []byte // writeCh is the buffered channel of messages waiting to write to the transport.
 	}
@@ -41,19 +42,20 @@ type (
 //
 func StartClient(ctx context.Context, transport Transport) error {
 	if ExceedMaxClients() {
-		// TODO, do we need to send special reason when close the transport
-		if err := transport.Close(); err != nil {
-			log.Println("ppcserver: exceed max clients in StartClient then call transport.Close() error:", err)
-			return nil
-		}
 		return ErrExceedMaxClients
 	}
 	incrNumClients()
 	defer decrNumClients()
 
+	// The ctx.Done channel returns from context.WithCancel() is closed when the cancelCtx() function is called
+	// or when the parent context's Done channel is closed, whichever happens first.
+	ctx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx() // Call cancelCtx when StartClient exits to ensure the current Client's resources are released.
+
 	c := &Client{
 		transport: transport,
 		state:     ClientStateConnected,
+		cancelCtx: cancelCtx,
 		readCh:    make(chan []byte),      // TODO, what is the buffer size?
 		writeCh:   make(chan []byte, 256), // TODO, buffer size is configurable
 	}
@@ -91,7 +93,9 @@ func StartClient(ctx context.Context, transport Transport) error {
 	return g.Wait()
 }
 
-// Close closes the connection with the peer.
+// Close first mutates Client to the ClientStateClosed state,
+// then closes the underlying transport connection with the peer.
+// Close does nothing if the Client's state is already ClientStateClosed.
 func (c *Client) Close() (err error) {
 	defer func() {
 		if err != nil {
@@ -109,6 +113,10 @@ func (c *Client) Close() (err error) {
 	}
 	c.state = ClientStateClosed
 	c.mu.Unlock()
+
+	// TODO, should send close message
+
+	// c.cancelCtx()
 
 	// transport.Close() closes the underlying network connection.
 	// It can be called concurrently, and it's OK to call Close more than once.

@@ -62,16 +62,13 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 	// HandleFunc registers the handler for processing WebSocket connection requests at opts.Path.
 	c.serveMux.HandleFunc(
 		c.opts.Path, func(w http.ResponseWriter, r *http.Request) {
-			conn, err := c.upgrader.Upgrade(w, r, nil)
-
 			// Note: upgrader.Upgrade will reply to the client with an HTTP error when it returns an error.
+			conn, err := c.upgrader.Upgrade(w, r, nil)
 			if err != nil {
 				log.Println("ppcserver: WebsocketConnector.upgrader.Upgrade() error:", err)
 				return
 			}
-
-			// Ensure the connection is closed when the current function exits.
-			defer conn.Close()
+			defer conn.Close() // Ensure the connection is closed when the current function exits.
 
 			if c.opts.MaxMessageSize > 0 {
 				conn.SetReadLimit(c.opts.MaxMessageSize)
@@ -83,6 +80,17 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 
 			c.clientsWg.Add(1)
 			defer c.clientsWg.Done()
+
+			// go func() {
+			// 	time.Sleep(time.Second * 3)
+			//
+			// 	if err := conn.WriteControl(
+			// 		websocket.CloseMessage, websocket.FormatCloseMessage(3000, "hello"),
+			// 		time.Now().Add(3*time.Second),
+			// 	); err != nil {
+			// 		log.Println("ppcserver: WriteControl() error:", err)
+			// 	}
+			// }()
 
 			if err := StartClient(
 				// Note: ctx passes in for closing the connection gracefully when the server is shutting down.

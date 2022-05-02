@@ -5,33 +5,32 @@
     <title>Drawing Example</title>
 </head>
 <body>
-</body>
-<script>
-    var url = "ws://localhost:8080/ws";
+<!-- Load Babel -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- @babel/standalone will automatically compile and execute all script tags with type text/babel -->
+<script type="text/babel">
+    const url = "ws://localhost:8080/ws";
 
-    var socket = connect();
+    const socket = new WebSocket(url);
+    socket.onopen = (event) => {
+        console.log("socket.onopen");
+        send({"hello": "world"});
+    }
+    socket.onclose = (event) => {
+        console.log("socket.onclose, code: " + event.code + ", reason: " + event.reason + ", wasClean: " + event.wasClean);
+    }
+    socket.onerror = (event) => {
+        console.log("socket.onerror, event:", event);
+    }
+    socket.onmessage = (event) => {
+        console.log("socket.onmessage:", event.data);
+    }
 
     // Send a POST request will get HTTP status code 400.
-    // fetch("http://localhost:8080/ws", { method: "POST" })
-    //     .then(resp => console.log("fetch resp:", resp))
-    //     .catch((err) => console.error("fetch error:", err));
-
-    function connect() {
-        socket = new WebSocket(url);
-        socket.onopen = function (event) {
-            console.log("socket.onopen");
-            send({"hello": "world"});
-        }
-        socket.onclose = function (event) {
-            console.log("socket.onclose, code: " + event.code + ", reason: " + event.reason);
-        }
-        socket.onerror = function (event) {
-            console.log("socket.onerror, event:", event);
-        }
-        socket.onmessage = function (event) {
-            console.log("socket.onmessage:", event.data);
-        }
-        return socket;
+    function testPOST() {
+        fetch("http://localhost:8080/ws", { method: "POST" })
+            .then(resp => console.log("testPOST resp:", resp))
+            .catch((err) => console.error("testPOST error:", err));
     }
 
     function send(data) {
@@ -39,4 +38,5 @@
         console.log("socket.send:", data);
     }
 </script>
+</body>
 </html>
