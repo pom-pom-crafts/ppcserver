@@ -70,14 +70,6 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 			}
 			defer conn.Close() // Ensure the connection is closed when the current function exits.
 
-			if c.opts.MaxMessageSize > 0 {
-				conn.SetReadLimit(c.opts.MaxMessageSize)
-			}
-
-			// TODO, wait pong
-			// conn.SetReadDeadline(time.Now().Add(0))
-			// c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-
 			c.clientsWg.Add(1)
 			defer c.clientsWg.Done()
 
@@ -91,6 +83,16 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 			// 		log.Println("ppcserver: WriteControl() error:", err)
 			// 	}
 			// }()
+
+			// SetReadLimit will close the connection when a client sends bytes larger than MaxMessageSize
+			// and returns ErrReadLimit from Client.transport.Read().
+			if c.opts.MaxMessageSize > 0 {
+				conn.SetReadLimit(c.opts.MaxMessageSize)
+			}
+
+			// TODO, wait pong
+			// conn.SetReadDeadline(time.Now().Add(0))
+			// c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
 			if err := StartClient(
 				// Note: ctx passes in for closing the connection gracefully when the server is shutting down.

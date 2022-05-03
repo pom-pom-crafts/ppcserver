@@ -21,8 +21,8 @@ type (
 		// Defaults to 1 second if not set through WithWriteTimeout.
 		WriteTimeout time.Duration
 
-		// MaxMessageSize is the maximum message size in bytes allowed from client.
-		// Defaults to 65536 bytes (64KB) if not set through WithMaxMessageSize.
+		// MaxMessageSize is the maximum allowed message size in bytes received from the client.
+		// Defaults to 4096 bytes (4KB) if not set through WithMaxMessageSize.
 		MaxMessageSize int64
 
 		// TLSCertFile is the path to TLS cert file.
@@ -37,7 +37,7 @@ func defaultWebsocketOptions() *WebsocketOptions {
 	return &WebsocketOptions{
 		Path:           "/",
 		WriteTimeout:   1 * time.Second,
-		MaxMessageSize: 65536,
+		MaxMessageSize: 4096,
 	}
 }
 
