@@ -162,8 +162,11 @@ func (c *Client) State() ClientState {
 }
 
 func (c *Client) Write(data []byte) error {
-	if err := c.transport.Write(data); err != nil {
-		return err
+	select {
+	case c.writeCh <- data:
+	default:
+		// TODO, do we need to close the writeCh when its buffer is full?
+		close(c.writeCh)
 	}
 	return nil
 }
