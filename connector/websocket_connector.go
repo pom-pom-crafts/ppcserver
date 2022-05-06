@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"github.com/gorilla/websocket"
 	"log"
 	"net"
 	"net/http"
@@ -12,37 +11,19 @@ import (
 // WebsocketConnector accepts WebSocket client connections,
 // responsible for sending and receiving data with a WebSocket client.
 type WebsocketConnector struct {
-	opts      *WebsocketOptions
-	serveMux  *http.ServeMux
-	server    *http.Server
-	upgrader  *websocket.Upgrader
+	opts      *Options
 	clientsWg sync.WaitGroup
 }
 
 // NewWebsocketConnector creates a new WebsocketConnector.
-func NewWebsocketConnector(addr string, opts ...WebsocketOption) *WebsocketConnector {
+func NewWebsocketConnector(opts ...Option) *WebsocketConnector {
 	c := &WebsocketConnector{
-		opts: defaultWebsocketOptions(),
+		opts: defaultOptions(),
 	}
 
 	// Apply opts to customize WebsocketConnector.
 	for _, opt := range opts {
-		opt(c)
-	}
-
-	// Initialize default values when required fields of WebsocketConnector are not set.
-	// Note: must run after all opts are applied since opts may set the required fields.
-	if c.serveMux == nil {
-		c.serveMux = http.DefaultServeMux
-	}
-	if c.server == nil {
-		c.server = &http.Server{
-			Addr:    addr,
-			Handler: c.serveMux,
-		}
-	}
-	if c.upgrader == nil {
-		c.upgrader = &websocket.Upgrader{}
+		opt(c.opts)
 	}
 
 	return c
@@ -55,15 +36,15 @@ func NewWebsocketConnector(addr string, opts ...WebsocketOption) *WebsocketConne
 func (c *WebsocketConnector) Start(ctx context.Context) error {
 	// BaseContext specifies the ctx as the base context for incoming requests on this server,
 	// which can be used to cancel the long-running HTTP requests and also the WebSocket connections.
-	c.server.BaseContext = func(_ net.Listener) context.Context {
+	c.opts.Server.BaseContext = func(_ net.Listener) context.Context {
 		return ctx
 	}
 
-	// HandleFunc registers the handler for processing WebSocket connection requests at opts.Path.
-	c.serveMux.HandleFunc(
-		c.opts.Path, func(w http.ResponseWriter, r *http.Request) {
+	// HandleFunc registers the handler for processing WebSocket connection requests at opts.WebsocketPath.
+	c.opts.ServeMux.HandleFunc(
+		c.opts.WebsocketPath, func(w http.ResponseWriter, r *http.Request) {
 			// Note: upgrader.Upgrade will reply to the client with an HTTP error when it returns an error.
-			conn, err := c.upgrader.Upgrade(w, r, nil)
+			conn, err := c.opts.Upgrader.Upgrade(w, r, nil)
 			if err != nil {
 				log.Println("ppcserver: WebsocketConnector.upgrader.Upgrade() error:", err)
 				return
@@ -97,11 +78,9 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 			if err := StartClient(
 				// Note: ctx passes in for closing the connection gracefully when the server is shutting down.
 				ctx, newWebsocketTransport(
-					conn, &websocketTransportOptions{
-						encodingType:   EncodingTypeJSON, // TODO, encodingType depends
-						writeTimeout:   c.opts.WriteTimeout,
-						maxMessageSize: c.opts.MaxMessageSize,
-					},
+					conn,
+					EncodingTypeJSON, // TODO, encodingType depends
+					c.opts,
 				),
 			); err != nil {
 				log.Println("ppcserver: StartClient() error:", err)
@@ -114,9 +93,9 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 	// or when PORT is already in-used.
 	var err error
 	if c.opts.TLSCertFile != "" || c.opts.TLSKeyFile != "" {
-		err = c.server.ListenAndServeTLS(c.opts.TLSCertFile, c.opts.TLSKeyFile)
+		err = c.opts.Server.ListenAndServeTLS(c.opts.TLSCertFile, c.opts.TLSKeyFile)
 	} else {
-		err = c.server.ListenAndServe()
+		err = c.opts.Server.ListenAndServe()
 	}
 	// ErrServerClosed returns on calling http.Server.Shutdown() and does not mean ListenAndServe() fails,
 	// so we return a nil error; for the other errors we return as is.
@@ -127,7 +106,7 @@ func (c *WebsocketConnector) Start(ctx context.Context) error {
 }
 
 func (c *WebsocketConnector) Shutdown(ctx context.Context) error {
-	if err := c.server.Shutdown(ctx); err != nil {
+	if err := c.opts.Server.Shutdown(ctx); err != nil {
 		return err
 	}
 

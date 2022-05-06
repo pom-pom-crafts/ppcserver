@@ -17,7 +17,7 @@ type (
 	// ServerOptions defines the configurable opts of the Server.
 	ServerOptions struct {
 		// ShutdownTimeout is the maximum time for Component.Shutdown() to complete.
-		// Defaults to 1 minute if not set through WithShutdownTimeout.
+		// Defaults to 1 minute if not set via WithShutdownTimeout.
 		ShutdownTimeout time.Duration
 	}
 

@@ -19,7 +19,8 @@ func main() {
 	ppcserver.NewServer(
 		ppcserver.WithComponent(
 			connector.NewWebsocketConnector(
-				":8080", connector.WithWebsocketPath("/ws"),
+				connector.WithAddr(":8080"),
+				connector.WithWebsocketPath("/ws"),
 			),
 		),
 	).Start()

@@ -50,7 +50,7 @@ func StartClient(ctx context.Context, transport Transport) error {
 	// The ctx.Done channel returns from context.WithCancel() is closed when the cancelCtx() function is called
 	// or when the parent context's Done channel is closed, whichever happens first.
 	ctx, cancelCtx := context.WithCancel(ctx)
-	defer cancelCtx() // Call cancelCtx when StartClient exits to ensure the current Client's resources are released.
+	defer cancelCtx() // Call cancelCtx when StartClient exits to ensure the current Client's resources are fully released.
 
 	c := &Client{
 		transport: transport,
@@ -81,7 +81,7 @@ func StartClient(ctx context.Context, transport Transport) error {
 	)
 	g.Go(
 		func() error {
-			return c.readLoop(ctx)
+			return c.readLoop()
 		},
 	)
 
@@ -90,6 +90,7 @@ func StartClient(ctx context.Context, transport Transport) error {
 	_ = c.Close()
 
 	// Block until both readLoop and writeLoop exit to achieve a graceful shutdown of the Client.
+	// The g.Wait() will return the first error that causes the blocking exits.
 	return g.Wait()
 }
 
@@ -124,9 +125,9 @@ func (c *Client) Close() (err error) {
 }
 
 // readLoop keep reading from the transport until transport.Read() errored.
-// The connection must be closed When readLoop exits by calling cancelCtx().
+// The only reason readLoop exits is an error returns from transport.Read().
 // readLoop must execute by a single goroutine to ensure that there is at most one concurrent reader on a connection.
-func (c *Client) readLoop(ctx context.Context) error {
+func (c *Client) readLoop() error {
 	// The readLoop method is the only sender on readCh,
 	// so we Close the readCh here to ensure not sending on the closed readCh channel.
 	defer close(c.readCh)
@@ -151,6 +152,9 @@ func (c *Client) readLoop(ctx context.Context) error {
 }
 
 func (c *Client) writeLoop(ctx context.Context) error {
+	// ticker := time.NewTicker(pingPeriod)
+	// defer ticker.Stop()
+
 	return nil
 }
 

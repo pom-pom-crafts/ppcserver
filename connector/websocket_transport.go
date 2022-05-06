@@ -10,25 +10,19 @@ const (
 	TransportProtocolTypeWebsocket TransportProtocolType = "websocket"
 )
 
-type (
-	websocketTransportOptions struct {
-		encodingType   EncodingType
-		writeTimeout   time.Duration
-		maxMessageSize int64
-	}
+// websocketTransport is a wrapper struct over websocket connection to fit Transport
+// interface so Client will accept it.
+type websocketTransport struct {
+	conn     *websocket.Conn
+	encoding EncodingType
+	opts     *Options
+}
 
-	// websocketTransport is a wrapper struct over websocket connection to fit Transport
-	// interface so Client will accept it.
-	websocketTransport struct {
-		conn *websocket.Conn
-		opts *websocketTransportOptions
-	}
-)
-
-func newWebsocketTransport(conn *websocket.Conn, opts *websocketTransportOptions) *websocketTransport {
+func newWebsocketTransport(conn *websocket.Conn, encoding EncodingType, opts *Options) *websocketTransport {
 	transport := &websocketTransport{
-		conn: conn,
-		opts: opts,
+		conn:     conn,
+		encoding: encoding,
+		opts:     opts,
 	}
 
 	return transport
@@ -52,13 +46,13 @@ func (t *websocketTransport) Read() ([]byte, error) {
 // Write data to websocket.Conn.
 func (t *websocketTransport) Write(data []byte) error {
 	messageType := websocket.TextMessage
-	if t.opts.encodingType == EncodingTypeProtobuf {
+	if t.encoding == EncodingTypeProtobuf {
 		messageType = websocket.BinaryMessage
 	}
 
 	// SetWriteDeadline should be set per WriteMessage call.
-	if t.opts.writeTimeout > 0 {
-		_ = t.conn.SetWriteDeadline(time.Now().Add(t.opts.writeTimeout))
+	if t.opts.WriteTimeout > 0 {
+		_ = t.conn.SetWriteDeadline(time.Now().Add(t.opts.WriteTimeout))
 	}
 
 	if err := t.conn.WriteMessage(messageType, data); err != nil {
